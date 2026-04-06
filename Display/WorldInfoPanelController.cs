@@ -14,19 +14,36 @@ public class WorldInfoPanelController : MonoBehaviour
 
     public void ApplyState(SpriteStateData state)
     {
+        Debug.Log("[WorldInfoPanelController] ApplyState called: " + state.Title);
+
         if (panelRoot != null)
         {
             panelRoot.SetActive(state.ShowPanel);
+            Debug.Log("[WorldInfoPanelController] panelRoot active = " + state.ShowPanel);
+        }
+        else
+        {
+            Debug.LogWarning("[WorldInfoPanelController] panelRoot is NULL");
         }
 
         if (titleText != null)
         {
             titleText.text = state.Title;
+            Debug.Log("[WorldInfoPanelController] titleText updated");
+        }
+        else
+        {
+            Debug.LogWarning("[WorldInfoPanelController] titleText is NULL");
         }
 
         if (bodyText != null)
         {
             bodyText.text = state.Body;
+            Debug.Log("[WorldInfoPanelController] bodyText updated");
+        }
+        else
+        {
+            Debug.LogWarning("[WorldInfoPanelController] bodyText is NULL");
         }
     }
 

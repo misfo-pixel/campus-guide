@@ -41,20 +41,44 @@ public class UMNContextManager : MonoBehaviour
             Body = newState.Body,
             ShowPanel = newState.ShowPanel
         };
+        ApplyCurrentState();
+    }
+
+    public void SetSceneZone(SceneZoneData zoneData)
+    {
+        currentState = new SpriteStateData
+        {
+            Mode = SpriteMode.Info,
+            Title = zoneData.title,
+            Body = zoneData.description,
+            ShowPanel = true
+        };
 
         ApplyCurrentState();
     }
 
-    private void ApplyCurrentState()
+    protected void ApplyCurrentState()
     {
+        Debug.Log("[UMNContextManager] ApplyCurrentState: " + currentState.Title);
+
         if (spriteDisplayController != null)
         {
+            Debug.Log("[UMNContextManager] spriteDisplayController found");
             spriteDisplayController.ApplyState(currentState);
+        }
+        else
+        {
+            Debug.LogWarning("[UMNContextManager] spriteDisplayController is NULL");
         }
 
         if (worldInfoPanelController != null)
         {
+            Debug.Log("[UMNContextManager] worldInfoPanelController found");
             worldInfoPanelController.ApplyState(currentState);
+        }
+        else
+        {
+            Debug.LogWarning("[UMNContextManager] worldInfoPanelController is NULL");
         }
     }
 }

@@ -23,4 +23,3 @@ public class UMNSpriteDisplayController : MonoBehaviour
         // - play speaking/listening visual feedback
     }
 }
-
