@@ -17,22 +17,26 @@ public class OpenAIResponseClient : MonoBehaviour
 
     public void RequestResponse(string fullContext, Action<LLMActionResult> onSuccess, Action<string> onError)
     {
-        if (string.IsNullOrWhiteSpace(apiKey))
+        LocalSecrets secrets = LocalSecrets.Load();
+        string resolvedApiKey = string.IsNullOrWhiteSpace(apiKey) ? secrets.azureOpenAIApiKey : apiKey;
+        string resolvedEndpoint = string.IsNullOrWhiteSpace(responsesEndpoint) ? secrets.azureOpenAIResponsesEndpoint : responsesEndpoint;
+
+        if (string.IsNullOrWhiteSpace(resolvedApiKey))
         {
             onError?.Invoke("Azure OpenAI apiKey is empty.");
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(responsesEndpoint))
+        if (string.IsNullOrWhiteSpace(resolvedEndpoint))
         {
             onError?.Invoke("Azure OpenAI responsesEndpoint is empty.");
             return;
         }
 
-        StartCoroutine(SendRequest(fullContext, onSuccess, onError));
+        StartCoroutine(SendRequest(fullContext, resolvedApiKey, resolvedEndpoint, onSuccess, onError));
     }
 
-    private IEnumerator SendRequest(string fullContext, Action<LLMActionResult> onSuccess, Action<string> onError)
+    private IEnumerator SendRequest(string fullContext, string resolvedApiKey, string resolvedEndpoint, Action<LLMActionResult> onSuccess, Action<string> onError)
     {
         string systemPrompt =
 @"You are UMN Sprite, an intelligent campus companion.
@@ -47,7 +51,7 @@ Keep title short.
 Keep body under 30 words.";
 
         string json = BuildRequestBody(systemPrompt, fullContext);
-        string requestUrl = BuildResponsesUrl();
+        string requestUrl = BuildResponsesUrl(resolvedEndpoint);
 
         Debug.Log("[OpenAIResponseClient] Sending request to: " + requestUrl);
 
@@ -59,7 +63,7 @@ Keep body under 30 words.";
         req.timeout = timeoutSeconds;
 
         req.SetRequestHeader("Content-Type", "application/json");
-        req.SetRequestHeader("api-key", apiKey);
+        req.SetRequestHeader("api-key", resolvedApiKey);
 
         yield return req.SendWebRequest();
 
@@ -91,9 +95,9 @@ Keep body under 30 words.";
         }
     }
 
-    private string BuildResponsesUrl()
+    private string BuildResponsesUrl(string resolvedEndpoint)
     {
-        string trimmed = responsesEndpoint.Trim();
+        string trimmed = resolvedEndpoint.Trim();
 
         if (trimmed.EndsWith("/responses", StringComparison.OrdinalIgnoreCase))
         {

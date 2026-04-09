@@ -19,6 +19,9 @@ public class LLMDemoRunner : MonoBehaviour
     [SerializeField] private OpenAIResponseClient openAIClient;
     [SerializeField] private WorldInfoPanelController worldInfoPanelController;
     [SerializeField] private SpriteActionController spriteActionController;
+    [Header("Speech Output")]
+    [SerializeField] private bool enableReplySpeech = true;
+    [SerializeField] private AzureSpeechTTSClient speechTtsClient;
     [SerializeField] private SummonButton summonButton = SummonButton.PrimaryAction;
     [SerializeField] private float officialFeedWaitTimeoutSeconds = 20f;
 
@@ -27,6 +30,7 @@ public class LLMDemoRunner : MonoBehaviour
 
     private void Start()
     {
+        TryResolveSpeechTtsClient();
         Debug.Log("[LLMDemoRunner] Started on: " + gameObject.name);
     }
 
@@ -59,7 +63,7 @@ public class LLMDemoRunner : MonoBehaviour
             }
         }
 
-        return Input.GetKeyDown(KeyCode.Space);
+        return false;
     }
 
     private bool WasSummonPressed(XRInputDevice controller)
@@ -154,11 +158,76 @@ public class LLMDemoRunner : MonoBehaviour
 
                 worldInfoPanelController.ApplyState(state);
                 spriteActionController.PlayAction(result.action);
+                TrySpeakReply(result);
             },
             onError: error =>
             {
                 Debug.LogError("[LLMDemoRunner] LLM error:\n" + error);
             }
         );
+    }
+
+    private void TryResolveSpeechTtsClient()
+    {
+        if (speechTtsClient != null)
+        {
+            return;
+        }
+
+        speechTtsClient = GetComponent<AzureSpeechTTSClient>();
+
+        if (speechTtsClient == null)
+        {
+            speechTtsClient = gameObject.AddComponent<AzureSpeechTTSClient>();
+        }
+    }
+
+    private void TrySpeakReply(LLMActionResult result)
+    {
+        if (!enableReplySpeech)
+        {
+            return;
+        }
+
+        TryResolveSpeechTtsClient();
+        if (speechTtsClient == null)
+        {
+            Debug.LogWarning("[LLMDemoRunner] Reply speech is enabled, but no AzureSpeechTTSClient is available.");
+            return;
+        }
+
+        string spokenReply = BuildSpokenReply(result);
+        if (string.IsNullOrWhiteSpace(spokenReply))
+        {
+            return;
+        }
+
+        speechTtsClient.SpeakText(
+            spokenReply,
+            onSuccess: () => Debug.Log("[LLMDemoRunner] Reply speech playback started."),
+            onError: error => Debug.LogError("[LLMDemoRunner] Reply speech error:\n" + error));
+    }
+
+    private static string BuildSpokenReply(LLMActionResult result)
+    {
+        if (result == null)
+        {
+            return null;
+        }
+
+        string title = string.IsNullOrWhiteSpace(result.title) ? string.Empty : result.title.Trim();
+        string body = string.IsNullOrWhiteSpace(result.body) ? string.Empty : result.body.Trim();
+
+        if (string.IsNullOrEmpty(title))
+        {
+            return body;
+        }
+
+        if (string.IsNullOrEmpty(body))
+        {
+            return title;
+        }
+
+        return title + ". " + body;
     }
 }

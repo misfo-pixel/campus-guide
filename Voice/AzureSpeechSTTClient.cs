@@ -20,13 +20,17 @@ public class AzureSpeechSTTClient : MonoBehaviour
 
     public void TranscribeWav(byte[] wavBytes, Action<string> onSuccess, Action<string> onError)
     {
-        if (string.IsNullOrWhiteSpace(apiKey))
+        LocalSecrets secrets = LocalSecrets.Load();
+        string resolvedApiKey = string.IsNullOrWhiteSpace(apiKey) ? secrets.azureOpenAIApiKey : apiKey;
+        string resolvedEndpoint = string.IsNullOrWhiteSpace(transcriptionEndpoint) ? secrets.azureOpenAITranscriptionEndpoint : transcriptionEndpoint;
+
+        if (string.IsNullOrWhiteSpace(resolvedApiKey))
         {
             onError?.Invoke("Azure OpenAI transcription apiKey is empty.");
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(transcriptionEndpoint))
+        if (string.IsNullOrWhiteSpace(resolvedEndpoint))
         {
             onError?.Invoke("Azure OpenAI transcriptionEndpoint is empty.");
             return;
@@ -38,10 +42,10 @@ public class AzureSpeechSTTClient : MonoBehaviour
             return;
         }
 
-        StartCoroutine(SendTranscriptionRequest(wavBytes, onSuccess, onError));
+        StartCoroutine(SendTranscriptionRequest(wavBytes, resolvedApiKey, resolvedEndpoint, onSuccess, onError));
     }
 
-    private IEnumerator SendTranscriptionRequest(byte[] wavBytes, Action<string> onSuccess, Action<string> onError)
+    private IEnumerator SendTranscriptionRequest(byte[] wavBytes, string resolvedApiKey, string resolvedEndpoint, Action<string> onSuccess, Action<string> onError)
     {
         if (wavBytes == null || wavBytes.Length == 0)
         {
@@ -62,7 +66,7 @@ public class AzureSpeechSTTClient : MonoBehaviour
             formSections.Add(new MultipartFormDataSection("language", languageHint));
         }
 
-        string requestUrl = BuildTranscriptionUrl();
+        string requestUrl = BuildTranscriptionUrl(resolvedEndpoint);
         Debug.Log("[AzureSpeechSTTClient] Sending transcription request to: " + requestUrl);
         Debug.Log(
             "[AzureSpeechSTTClient] model=" + model +
@@ -74,7 +78,7 @@ public class AzureSpeechSTTClient : MonoBehaviour
         req.downloadHandler = new DownloadHandlerBuffer();
         req.timeout = timeoutSeconds;
 
-        req.SetRequestHeader("api-key", apiKey);
+        req.SetRequestHeader("api-key", resolvedApiKey);
         req.SetRequestHeader("Accept", "application/json");
 
         yield return req.SendWebRequest();
@@ -108,9 +112,9 @@ public class AzureSpeechSTTClient : MonoBehaviour
         onSuccess?.Invoke(text);
     }
 
-    private string BuildTranscriptionUrl()
+    private string BuildTranscriptionUrl(string resolvedEndpoint)
     {
-        string trimmed = transcriptionEndpoint.Trim();
+        string trimmed = resolvedEndpoint.Trim();
 
         if (trimmed.EndsWith("/audio/transcriptions", StringComparison.OrdinalIgnoreCase) ||
             trimmed.Contains("/audio/transcriptions?", StringComparison.OrdinalIgnoreCase))

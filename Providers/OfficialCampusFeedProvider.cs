@@ -46,44 +46,80 @@ public class OfficialCampusFeedProvider : MonoBehaviour
 
     public IEnumerator FetchFeed()
     {
-        using UnityWebRequest req = UnityWebRequest.Get(feedUrl);
-        req.timeout = timeoutSeconds;
-        yield return req.SendWebRequest();
+        string[] candidateUrls = BuildCandidateFeedUrls();
+        string xmlText = null;
+        bool loadedFromCandidate = false;
 
-        Debug.LogWarning(
-            "[OfficialCampusFeedProvider] Feed request finished. " +
-            "Result=" + req.result +
-            " Code=" + req.responseCode);
-
-        if (req.result != UnityWebRequest.Result.Success)
+        for (int candidateIndex = 0; candidateIndex < candidateUrls.Length; candidateIndex++)
         {
-            Debug.LogError(
-                "[OfficialCampusFeedProvider] Feed request failed. " +
-                "Result=" + req.result +
-                " Code=" + req.responseCode +
-                "\n" + req.error +
-                "\n" + req.downloadHandler.text);
+            string candidateUrl = candidateUrls[candidateIndex];
+            using UnityWebRequest req = UnityWebRequest.Get(candidateUrl);
+            req.timeout = timeoutSeconds;
+            yield return req.SendWebRequest();
+
+            Debug.LogWarning(
+                "[OfficialCampusFeedProvider] Feed request finished. " +
+                "Url=" + candidateUrl +
+                " Result=" + req.result +
+                " Code=" + req.responseCode);
+
+            if (req.result != UnityWebRequest.Result.Success)
+            {
+                Debug.LogError(
+                    "[OfficialCampusFeedProvider] Feed request failed. " +
+                    "Url=" + candidateUrl +
+                    " Result=" + req.result +
+                    " Code=" + req.responseCode +
+                    "\n" + req.error +
+                    "\n" + req.downloadHandler.text);
+                continue;
+            }
+
+            xmlText = req.downloadHandler.text;
+
+            if (LooksLikeHtmlDocument(xmlText) && candidateIndex + 1 < candidateUrls.Length)
+            {
+                Debug.LogWarning("[OfficialCampusFeedProvider] Feed returned HTML for " + candidateUrl + ". Trying fallback URL.");
+                continue;
+            }
+
+            loadedFromCandidate = true;
+            break;
+        }
+
+        if (!loadedFromCandidate || string.IsNullOrWhiteSpace(xmlText))
+        {
+            hasLoaded = true;
+            latestItems.Clear();
+            Debug.LogError("[OfficialCampusFeedProvider] Could not load a usable official events feed from any candidate URL.");
             yield break;
         }
 
-        string xmlText = req.downloadHandler.text;
-        try
+        if (LooksLikeHtmlDocument(xmlText))
         {
-            // Preferred path: parse a real RSS payload with <item><title>...</title></item>.
-            ParseRss(xmlText);
+            Debug.LogWarning("[OfficialCampusFeedProvider] Feed returned HTML instead of RSS/XML. Using fallback parser.");
+            ParseHtmlFallback(xmlText);
         }
-        catch (System.Exception ex)
+        else
         {
-            Debug.LogError(
-                "[OfficialCampusFeedProvider] RSS parse failed.\n" +
-                ex +
-                "\nResponse preview:\n" +
-                GetPreview(xmlText));
+            try
+            {
+                // Preferred path: parse a real RSS payload with <item><title>...</title></item>.
+                ParseRss(xmlText);
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError(
+                    "[OfficialCampusFeedProvider] RSS parse failed.\n" +
+                    ex +
+                    "\nResponse preview:\n" +
+                    GetPreview(xmlText));
 
-            // Last-resort fallback for inspection/debugging.
-            // This is intentionally strict and may still produce zero items.
-            // Zero items is safer than sending page boilerplate to the model.
-            ParseRssFallback(xmlText);
+                // Last-resort fallback for inspection/debugging.
+                // This is intentionally strict and may still produce zero items.
+                // Zero items is safer than sending page boilerplate to the model.
+                ParseRssFallback(xmlText);
+            }
         }
 
         hasLoaded = true;
@@ -91,6 +127,28 @@ public class OfficialCampusFeedProvider : MonoBehaviour
             "[OfficialCampusFeedProvider] Feed loaded successfully. " +
             "Items=" + latestItems.Count +
             " Summary=" + GetEventsSummary());
+    }
+
+    private string[] BuildCandidateFeedUrls()
+    {
+        List<string> candidates = new List<string>();
+
+        if (!string.IsNullOrWhiteSpace(feedUrl))
+        {
+            candidates.Add(feedUrl.Trim());
+        }
+
+        if (!string.IsNullOrWhiteSpace(feedUrl) &&
+            feedUrl.Contains("events.tc.umn.edu", System.StringComparison.OrdinalIgnoreCase))
+        {
+            string liveWhaleRssUrl = "https://events.tc.umn.edu/live/rss/events/";
+            if (!candidates.Contains(liveWhaleRssUrl))
+            {
+                candidates.Add(liveWhaleRssUrl);
+            }
+        }
+
+        return candidates.ToArray();
     }
 
     private void ParseRssFallback(string xmlText)
@@ -121,6 +179,41 @@ public class OfficialCampusFeedProvider : MonoBehaviour
 
             latestItems.Add(title);
         }
+    }
+
+    private void ParseHtmlFallback(string htmlText)
+    {
+        latestItems.Clear();
+
+        MatchCollection headingMatches = Regex.Matches(
+            htmlText,
+            @"<(h1|h2|h3)[^>]*>\s*(.*?)\s*</\1>",
+            RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+        for (int i = 0; i < headingMatches.Count && latestItems.Count < maxItems; i++)
+        {
+            string title = StripHtml(headingMatches[i].Groups[2].Value);
+            title = System.Net.WebUtility.HtmlDecode(title).Trim();
+
+            if (string.IsNullOrWhiteSpace(title) || LooksLikeGenericPageCopy(title))
+            {
+                continue;
+            }
+
+            if (title.Length < 8)
+            {
+                continue;
+            }
+
+            latestItems.Add(title);
+        }
+
+        if (latestItems.Count > 0)
+        {
+            return;
+        }
+
+        ParseRssFallback(htmlText);
     }
 
     private string GetPreview(string text)
@@ -219,5 +312,27 @@ public class OfficialCampusFeedProvider : MonoBehaviour
         }
 
         return false;
+    }
+
+    private bool LooksLikeHtmlDocument(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        string trimmed = text.TrimStart();
+        return trimmed.StartsWith("<!DOCTYPE html", System.StringComparison.OrdinalIgnoreCase) ||
+               trimmed.StartsWith("<html", System.StringComparison.OrdinalIgnoreCase);
+    }
+
+    private string StripHtml(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return string.Empty;
+        }
+
+        return Regex.Replace(text, "<.*?>", string.Empty);
     }
 }

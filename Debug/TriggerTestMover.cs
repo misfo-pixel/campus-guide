@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 public class TriggerTestMover : MonoBehaviour
 {
@@ -11,7 +12,13 @@ public class TriggerTestMover : MonoBehaviour
 
     private void Update()
     {
-        if (Input.GetKeyDown(KeyCode.W))
+        Keyboard keyboard = Keyboard.current;
+        if (keyboard == null)
+        {
+            return;
+        }
+
+        if (keyboard.wKey.wasPressedThisFrame)
         {
             Debug.Log("[TriggerTestMover] W pressed");
         }
@@ -19,10 +26,10 @@ public class TriggerTestMover : MonoBehaviour
         float x = 0f;
         float z = 0f;
 
-        if (Input.GetKey(KeyCode.A)) x = -1f;
-        if (Input.GetKey(KeyCode.D)) x = 1f;
-        if (Input.GetKey(KeyCode.W)) z = 1f;
-        if (Input.GetKey(KeyCode.S)) z = -1f;
+        if (keyboard.aKey.isPressed) x = -1f;
+        if (keyboard.dKey.isPressed) x = 1f;
+        if (keyboard.wKey.isPressed) z = 1f;
+        if (keyboard.sKey.isPressed) z = -1f;
 
         Vector3 movement = new Vector3(x, 0f, z) * speed * Time.deltaTime;
         transform.Translate(movement, Space.World);

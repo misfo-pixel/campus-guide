@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 public class ContextPrintTester : MonoBehaviour
 {
@@ -6,7 +7,7 @@ public class ContextPrintTester : MonoBehaviour
 
     private void Update()
     {
-        if (Input.GetKeyDown(KeyCode.Space))
+        if (Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame)
         {
             if (inputContextAssembler != null)
             {
